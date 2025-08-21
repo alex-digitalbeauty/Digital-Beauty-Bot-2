@@ -7,8 +7,21 @@ TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# Константа курса
-USD_UAH = 49
+# ID администратора (узнай через /start, выведи message.chat.id)
+ADMIN_ID = 123456789
+
+# Конфигурация
+config = {
+    "USD_UAH": 49,  # курс по умолчанию
+    "devices": {
+        "IPL A-Tone": 27000,
+        "Finexel CO2": 30000,
+        "10THERMA": 25000
+    }
+}
+
+# Словарь для хранения данных пользователя
+user_data = {}
 
 # Главное меню
 def main_menu():
@@ -33,17 +46,17 @@ def contact_manager(message):
 @bot.message_handler(func=lambda m: m.text == "📊 Розрахувати окупність апарату")
 def choose_device(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("IPL A-Tone", "Finexel CO2", "10THERMA", "⬅️ Повернутись в меню")
+    for dev in config["devices"].keys():
+        markup.add(dev)
+    markup.add("⬅️ Повернутись в меню")
     bot.send_message(message.chat.id, "Оберіть апарат:", reply_markup=markup)
-
-# Словарь для хранения данных пользователя
-user_data = {}
 
 # Вопросы по шагам
 def ask_question_step(chat_id, step):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     if step == 1:
-        markup.add("27000€", "Ввести іншу вартість", "⬅️ Повернутись в меню")
+        default_price = f"{config['devices'][user_data[chat_id]['device']]}€"
+        markup.add(default_price, "Ввести іншу вартість", "⬅️ Повернутись в меню")
         bot.send_message(chat_id, "Вартість апарату:", reply_markup=markup)
     elif step == 2:
         markup.add("200 процедур", "Ввести іншу кількість", "⬅️ Повернутись в меню")
@@ -57,7 +70,7 @@ def ask_question_step(chat_id, step):
     user_data[chat_id]['step'] = step
 
 # Обработка выбора аппарата
-@bot.message_handler(func=lambda m: m.text in ["IPL A-Tone", "Finexel CO2", "10THERMA"])
+@bot.message_handler(func=lambda m: m.text in config["devices"].keys())
 def device_selected(message):
     chat_id = message.chat.id
     user_data[chat_id] = {"device": message.text}
@@ -68,97 +81,105 @@ def device_selected(message):
 def handle_answers(message):
     chat_id = message.chat.id
 
-    # Кнопка "Вернуться в меню" работает всегда
+    # 🔹 Админ-команды
+    if message.text.startswith("/"):
+        if chat_id != ADMIN_ID:
+            bot.send_message(chat_id, "У вас немає прав ❌")
+            return
+        cmd = message.text.split()
+        if cmd[0] == "/set_usd" and len(cmd) == 2:
+            try:
+                config["USD_UAH"] = float(cmd[1])
+                bot.send_message(chat_id, f"✅ Курс змінено: {config['USD_UAH']} грн/$")
+            except:
+                bot.send_message(chat_id, "❌ Приклад: /set_usd 50")
+        elif cmd[0] == "/set_price" and len(cmd) == 3:
+            name, price = cmd[1], cmd[2]
+            if name in config["devices"]:
+                config["devices"][name] = float(price)
+                bot.send_message(chat_id, f"✅ Ціна {name} змінена на {price}€")
+            else:
+                bot.send_message(chat_id, "❌ Немає такого апарату")
+        elif cmd[0] == "/add_device" and len(cmd) == 3:
+            name, price = cmd[1], float(cmd[2])
+            config["devices"][name] = price
+            bot.send_message(chat_id, f"✅ Додано апарат {name} ({price}€)")
+        elif cmd[0] == "/remove_device" and len(cmd) == 2:
+            name = cmd[1]
+            if name in config["devices"]:
+                del config["devices"][name]
+                bot.send_message(chat_id, f"✅ Апарат {name} видалено")
+            else:
+                bot.send_message(chat_id, "❌ Немає такого апарату")
+        else:
+            bot.send_message(chat_id, "❌ Невідома команда")
+        return
+
+    # Кнопка "Вернуться в меню"
     if message.text == "⬅️ Повернутись в меню":
         bot.send_message(chat_id, "Повертаємось в меню:", reply_markup=main_menu())
         user_data.pop(chat_id, None)
         return
 
-    # Если пользователь не в процессе — игнорируем
     if chat_id not in user_data:
         return
 
     step = user_data[chat_id].get('step', 0)
 
-    # Шаг 1 — стоимость аппарата
+    # Шаги
     if step == 1:
-        if message.text == "27000€":
-            user_data[chat_id]['cost'] = 27000
+        try:
+            val = float(message.text.replace("€", "").replace(" ", ""))
+            user_data[chat_id]['cost'] = val
             ask_question_step(chat_id, 2)
-        else:
-            try:
-                val = float(message.text.replace("€", "").replace(" ", ""))
-                user_data[chat_id]['cost'] = val
-                ask_question_step(chat_id, 2)
-            except:
-                bot.send_message(chat_id, "Помилка! Введіть число (€):")
-
-    # Шаг 2 — количество процедур
+        except:
+            bot.send_message(chat_id, "Помилка! Введіть число (€):")
     elif step == 2:
-        if message.text == "200 процедур":
-            user_data[chat_id]['count'] = 200
+        try:
+            val = int(message.text.replace("процедур", "").strip())
+            user_data[chat_id]['count'] = val
             ask_question_step(chat_id, 3)
-        else:
-            try:
-                val = int(message.text)
-                user_data[chat_id]['count'] = val
-                ask_question_step(chat_id, 3)
-            except:
-                bot.send_message(chat_id, "Помилка! Введіть число процедур:")
-
-    # Шаг 3 — стоимость процедуры
+        except:
+            bot.send_message(chat_id, "Помилка! Введіть число процедур:")
     elif step == 3:
-        if message.text == "3500 грн":
-            user_data[chat_id]['price'] = 3500
+        try:
+            val = float(message.text.replace("грн","").replace(" ",""))
+            user_data[chat_id]['price'] = val
             ask_question_step(chat_id, 4)
-        else:
-            try:
-                val = float(message.text.replace("грн", "").replace(" ", ""))
-                user_data[chat_id]['price'] = val
-                ask_question_step(chat_id, 4)
-            except:
-                bot.send_message(chat_id, "Помилка! Введіть число (грн):")
-
-    # Шаг 4 — зарплата специалиста
+        except:
+            bot.send_message(chat_id, "Помилка! Введіть число (грн):")
     elif step == 4:
-        if message.text == "15% від вартості послуги":
-            user_data[chat_id]['salary_percent'] = 15
-        else:
-            try:
-                val = float(message.text.replace("%", "").replace(" ", ""))
-                user_data[chat_id]['salary_percent'] = val
-            except:
-                bot.send_message(chat_id, "Помилка! Введіть число %:")
-                return
+        try:
+            val = float(message.text.replace("%",""))
+            user_data[chat_id]['salary_percent'] = val
+        except:
+            bot.send_message(chat_id, "Помилка! Введіть число %:")
+            return
 
-        # Расчет окупаемости
-        device_name = user_data[chat_id]['device']
-        cost_uah = user_data[chat_id]['cost'] * USD_UAH
+        # 🔹 Расчет
+        cost_uah = user_data[chat_id]['cost'] * config["USD_UAH"]
         net_profit = (user_data[chat_id]['price'] * user_data[chat_id]['count']) - \
                      (user_data[chat_id]['price'] * user_data[chat_id]['salary_percent']/100 * user_data[chat_id]['count'])
         months = round(cost_uah / net_profit, 1)
         salary_per_procedure = user_data[chat_id]['price'] * user_data[chat_id]['salary_percent']/100
 
         text = f"""
-📊 {device_name}
-Вартість апарату: {user_data[chat_id]['cost']} €
-Кількість процедур в місяць: {user_data[chat_id]['count']}
+{user_data[chat_id]['device']}
+Вартість апарату: {user_data[chat_id]['cost']}€
+Курс: {config['USD_UAH']} грн/$
+Кількість процедур: {user_data[chat_id]['count']}
 Вартість процедури: {user_data[chat_id]['price']} грн
-Заробітня плата фахівця за процедуру: {salary_per_procedure:.2f} грн
-Окупність апарату: {months} місяців
+ЗП фахівця: {salary_per_procedure} грн
+Окупність: {months} місяців
 
-Для звʼязку з менеджером пишіть сюди: @alex_digital_beauty
+Для звʼязку з менеджером: @alex_digital_beauty
 """
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
         markup.add("👨‍💼 Звʼязок з менеджером", "⬅️ Повернутись в меню")
         bot.send_message(chat_id, text, reply_markup=markup)
-
-        # Сбрасываем данные
         user_data.pop(chat_id, None)
 
-# ======================
 # Вебхук для Telegram
-# ======================
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     json_str = request.get_data().decode("utf-8")
