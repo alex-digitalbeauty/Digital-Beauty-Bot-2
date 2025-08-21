@@ -8,7 +8,7 @@ bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
 # ID администратора (узнай через /start, выведи message.chat.id)
-ADMIN_ID = 123456789
+ADMIN_ID = 535869416
 
 # Конфигурация
 config = {
@@ -197,3 +197,4 @@ if __name__ == "__main__":
     bot.remove_webhook()
     bot.set_webhook(url=f"{RENDER_URL}/{TOKEN}")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
