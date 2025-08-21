@@ -61,8 +61,7 @@ def ask_question_step(chat_id, step):
 def device_selected(message):
     chat_id = message.chat.id
     user_data[chat_id] = {"device": message.text}
-    if message.text == "IPL A-Tone":
-        ask_question_step(chat_id, 1)
+    ask_question_step(chat_id, 1)
 
 # Универсальный обработчик всех ответов
 @bot.message_handler(func=lambda m: True)
@@ -88,11 +87,12 @@ def handle_answers(message):
             ask_question_step(chat_id, 2)
         else:
             try:
-                val = float(message.text.replace("€", ""))
+                val = float(message.text.replace("€", "").replace(" ", ""))
                 user_data[chat_id]['cost'] = val
                 ask_question_step(chat_id, 2)
             except:
                 bot.send_message(chat_id, "Помилка! Введіть число (€):")
+
     # Шаг 2 — количество процедур
     elif step == 2:
         if message.text == "200 процедур":
@@ -105,6 +105,7 @@ def handle_answers(message):
                 ask_question_step(chat_id, 3)
             except:
                 bot.send_message(chat_id, "Помилка! Введіть число процедур:")
+
     # Шаг 3 — стоимость процедуры
     elif step == 3:
         if message.text == "3500 грн":
@@ -112,24 +113,26 @@ def handle_answers(message):
             ask_question_step(chat_id, 4)
         else:
             try:
-                val = float(message.text.replace("грн","").replace(" ",""))
+                val = float(message.text.replace("грн", "").replace(" ", ""))
                 user_data[chat_id]['price'] = val
                 ask_question_step(chat_id, 4)
             except:
                 bot.send_message(chat_id, "Помилка! Введіть число (грн):")
+
     # Шаг 4 — зарплата специалиста
     elif step == 4:
         if message.text == "15% від вартості послуги":
             user_data[chat_id]['salary_percent'] = 15
         else:
             try:
-                val = float(message.text.replace("%",""))
+                val = float(message.text.replace("%", "").replace(" ", ""))
                 user_data[chat_id]['salary_percent'] = val
             except:
                 bot.send_message(chat_id, "Помилка! Введіть число %:")
                 return
 
         # Расчет окупаемости
+        device_name = user_data[chat_id]['device']
         cost_uah = user_data[chat_id]['cost'] * USD_UAH
         net_profit = (user_data[chat_id]['price'] * user_data[chat_id]['count']) - \
                      (user_data[chat_id]['price'] * user_data[chat_id]['salary_percent']/100 * user_data[chat_id]['count'])
@@ -137,11 +140,11 @@ def handle_answers(message):
         salary_per_procedure = user_data[chat_id]['price'] * user_data[chat_id]['salary_percent']/100
 
         text = f"""
-IPL A-Tone
-Вартість апарату: {user_data[chat_id]['cost']}€
+📊 {device_name}
+Вартість апарату: {user_data[chat_id]['cost']} €
 Кількість процедур в місяць: {user_data[chat_id]['count']}
 Вартість процедури: {user_data[chat_id]['price']} грн
-Заробітня плата фахівця за процедуру: {salary_per_procedure} грн
+Заробітня плата фахівця за процедуру: {salary_per_procedure:.2f} грн
 Окупність апарату: {months} місяців
 
 Для звʼязку з менеджером пишіть сюди: @alex_digital_beauty
@@ -150,10 +153,12 @@ IPL A-Tone
         markup.add("👨‍💼 Звʼязок з менеджером", "⬅️ Повернутись в меню")
         bot.send_message(chat_id, text, reply_markup=markup)
 
-        # Сбрасываем шаг, но оставляем возможность вернуться в меню
+        # Сбрасываем данные
         user_data.pop(chat_id, None)
 
+# ======================
 # Вебхук для Telegram
+# ======================
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     json_str = request.get_data().decode("utf-8")
