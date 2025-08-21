@@ -8,7 +8,7 @@ bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
 # ID администратора (узнай через /start, выведи message.chat.id)
-ADMIN_ID = 535869416
+ADMIN_ID = 123456789
 
 # Конфигурация
 config = {
@@ -193,8 +193,8 @@ def index():
     return "Бот працює через webhook!", 200
 
 if __name__ == "__main__":
-    RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
+    # ⚡ Исправлено: берем HOSTNAME, а не URL
+    HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME")
     bot.remove_webhook()
-    bot.set_webhook(url=f"{RENDER_URL}/{TOKEN}")
+    bot.set_webhook(url=f"https://{HOSTNAME}/{TOKEN}")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
